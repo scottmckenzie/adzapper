@@ -31,7 +31,7 @@ use bytes;
 
 use POSIX ":sys_wait_h";
 use Socket;
-require 'flush.pl';
+use IO::Handle;
 
 $::IOSIZE=1024;
 
@@ -232,7 +232,7 @@ while (defined ($_=<STDIN>))
 {
   if (defined $::LogFile)
   { print LOGFILE $_;
-    flush(LOGFILE);
+    LOGFILE->flush();
   }
   chomp;
   
@@ -259,7 +259,7 @@ while (defined ($_=<STDIN>))
     }
   }
 
-  flush(STDOUT);
+  STDOUT->flush();
 }
 
 exit 0;
@@ -406,7 +406,6 @@ sub mkzapcode($)
 
   $code;
 }
-
 
 sub subptn2re($)
 { local($_)=@_;
@@ -789,14 +788,14 @@ sub proxy_forkchild($$$)
       }
 
       # dispatch request and headers
-      printflush(GCHILD_WRITE,"$method $uri $v1 $v2\n")
+      GCHILD_WRITE->printflush("$method $uri $v1 $v2\n")
 	|| die "tell grandchild the request: $!";
 
       print PROXY "$method $uri HTTP/$v1.$v2\r\n";
       for my $H (@hdrs)
       { print PROXY $H->[0], ":", $H->[1], "\r\n";
       }
-      printflush(PROXY,"\r\n");
+      PROXY->printflush("\r\n");
       ##warn "[$$]: sent rq to proxy\n";
 
       proxy_copybody(CONN,PROXY,$method,$persist,\@hdrs)
@@ -965,7 +964,7 @@ sub proxy_grandchild($)
     }
 
     warn "[$child:$$]: pass response to parent\n";
-    printflush(TOCHILD,($persist ? PERSIST : CLOSE)." $code $info")
+    TOCHILD->printflush(($persist ? PERSIST : CLOSE)." $code $info")
 	|| die "[$child:$$]: print(TOCHILD) fails: $!";
     warn "[$child:$$]: told parent, passing response to client\n";
 
@@ -974,7 +973,7 @@ sub proxy_grandchild($)
     for my $H (@hdrs)
     { print CONN $H->[0], ":", $H->[1], "\r\n";
     }
-    printflush(CONN,"\r\n");
+    CONN->printflush("\r\n");
 
     # see RFC2616 section 10
     if (
@@ -1050,7 +1049,7 @@ sub proxy_copycl($$$)
 	)
   {
     ##warn "[$$]: read ".length($_)." bytes of request body\n";
-    if (! printflush($to,$_))
+    if (! $to->printflush($_))
     { warn "$::cmd: [$$]: printflush($to,..): $!";
       $ok=0;
       last COPY;
@@ -1061,6 +1060,7 @@ sub proxy_copycl($$$)
 
   return ($ok,"");
 }
+
 sub proxy_copychunked($$)
 { my($from,$to)=@_;
 
@@ -1083,10 +1083,10 @@ sub proxy_copychunked($$)
     { print $to $_;
       $chunksize-=length;
     }
-    flush($to);
+    $to->flush();
   }
 
-  flush($to);
+  $to->flush();
 
   # pass trailer headers
   while (defined($_=<$from>) && !/^\r?\n/)
@@ -1096,7 +1096,7 @@ sub proxy_copychunked($$)
   { ##warn "[$$]: final trailer: $_";
     print $to $_;
   }
-  flush($to);
+  $to->flush();
 
   return (1,"");
 }
